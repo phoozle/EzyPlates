@@ -1,23 +1,34 @@
 require './personalised_plate.rb'
 
 class PlateSequencer
+  WORKERS = 50
+
   def initialize(alphanumeric)
     @alphanumeric = alphanumeric
+    @available = []
     # Validate alphamumeric is usable and in a correct format
     validate
   end
 
   def available
-    available = sequencable_range.map do |number|
-      # ABC001, ABC002, etc
-      alphanumeric = @alphanumeric + format("%0#{available_digits}d", number)
+    sequencable_range.each_slice(WORKERS) do |numbers|
+      threads = []
+      numbers.each do |number|
+        threads << Thread.new do
+          # ABC001, ABC002, etc
+          alphanumeric = @alphanumeric +
+                         format("%0#{available_digits}d", number)
 
-      plate = PersonalisedPlate.new(alphanumeric)
-      plate.available? ? alphanumeric : nil
+          plate = PersonalisedPlate.new(alphanumeric)
+          @available << alphanumeric if plate.available?
+        end
+      end
+
+      threads.each(&:join)
     end
 
-    # Return available plates, removes nils
-    available.compact
+    # Return available plates
+    @available.sort_by { |plate| plate[/\d+/].to_i }
   end
 
   def sequencable_range
